@@ -8,6 +8,7 @@ import {
   signSession,
 } from "@/lib/auth";
 import { requireServerEnv } from "@/lib/env";
+import { isValidName } from "@/lib/names";
 
 export const runtime = "nodejs";
 
@@ -18,15 +19,21 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Server not configured." }, { status: 500 });
   }
 
-  let body: { code?: unknown } = {};
+  let body: { code?: unknown; name?: unknown } = {};
   try {
     body = await request.json();
   } catch {
-    // fall through
+
   }
 
   const code = typeof body.code === "string" ? body.code.trim() : "";
-  if (!code || code.length > 200 || !checkPasscode(code)) {
+  const name = typeof body.name === "string" ? body.name.trim() : "";
+  if (
+    !code ||
+    code.length > 200 ||
+    !checkPasscode(code) ||
+    !isValidName(name)
+  ) {
     return NextResponse.json({ error: "Invalid passcode." }, { status: 401 });
   }
 
