@@ -4,10 +4,6 @@ import { serverEnv } from "./env";
 export const SESSION_COOKIE = "ma_session";
 export const SESSION_TTL = 60 * 60 * 24 * 30;
 
-const FAIL_LIMIT = 5;
-const FAIL_WINDOW_MS = 10 * 60 * 1000;
-const failures = new Map<string, number>();
-
 function toBase64Url(buf: Buffer): string {
   return Buffer.from(buf).toString("base64url");
 }
@@ -53,15 +49,4 @@ export function getRoomId(): string {
       .digest("hex")
       .slice(0, 24)
   );
-}
-
-export function isLocked(key: string): boolean {
-  return (failures.get(key) ?? 0) >= FAIL_LIMIT;
-}
-
-export function recordFailure(key: string): void {
-  failures.set(key, (failures.get(key) ?? 0) + 1);
-  setTimeout(() => {
-    failures.set(key, Math.max(0, (failures.get(key) ?? 0) - 1));
-  }, FAIL_WINDOW_MS);
 }
