@@ -3,11 +3,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { getBrowserClient } from "@/lib/client";
+import { imageIsExpired } from "@/lib/images";
 
 type Message = {
   id: number;
   sender: string;
   body: string;
+  image_path: string | null;
+  image_expires_at: string | null;
   created_at: string;
 };
 
@@ -40,11 +43,13 @@ export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [roomId, setRoomId] = useState("");
 
   const lastIdRef = useRef(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const appendMessages = useCallback((incoming: Message[]) => {
     if (!incoming.length) return;
@@ -192,22 +197,15 @@ export default function Home() {
     }
   }
 
-  async function handleSend(e: React.FormEvent) {
-    e.preventDefault();
-    const text = input.trim();
-    if (!text || sending) return;
+  async function postMessage(text: string, imagePath: string | null): Promise<boolean> {
     setSending(true);
-    setInput("");
     try {
       const res = await fetch("/api/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ body: text, sender: name }),
+        body: JSON.stringify({ body: text, sender: name, imagePath }),
       });
-      if (!res.ok) {
-        setInput(text);
-        return;
-      }
+      if (!res.ok) return false;
       const data = await res.json();
       const msg = data.message as Message;
       appendMessages([msg]);
@@ -219,10 +217,75 @@ export default function Home() {
           payload: msg,
         }).catch(() => {});
       }
+      return true;
     } catch {
-      setInput(text);
+      return false;
     } finally {
       setSending(false);
+    }
+  }
+
+  async function handleSend(e: React.FormEvent) {
+    e.preventDefault();
+    const text = input.trim();
+    if (!text || sending || uploading) return;
+    setInput("");
+    const ok = await postMessage(text, null);
+    if (!ok) setInput(text);
+  }
+
+  async function compressImage(file: File): Promise<Blob> {
+    if (file.type === "image/gif") return file;
+    try {
+      const bitmap = await createImageBitmap(file);
+      const max = 1600;
+      const scale = Math.min(1, max / Math.max(bitmap.width, bitmap.height));
+      const width = Math.max(1, Math.round(bitmap.width * scale));
+      const height = Math.max(1, Math.round(bitmap.height * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        bitmap.close();
+        return file;
+      }
+      ctx.drawImage(bitmap, 0, 0, width, height);
+      bitmap.close();
+      const mime =
+        file.type === "image/png" || file.type === "image/webp"
+          ? file.type
+          : "image/jpeg";
+      const blob = await new Promise<Blob | null>((resolve) =>
+        canvas.toBlob(resolve, mime, 0.82),
+      );
+      return blob ?? file;
+    } catch {
+      return file;
+    }
+  }
+
+  async function handlePick(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || uploading) return;
+    if (!file.type.startsWith("image/")) return;
+    setUploading(true);
+    const text = input.trim();
+    try {
+      const blob = await compressImage(file);
+      const fd = new FormData();
+      fd.append("file", blob, "photo.jpg");
+      const up = await fetch("/api/upload", { method: "POST", body: fd });
+      if (!up.ok) return;
+      const data = await up.json();
+      setInput("");
+      const ok = await postMessage(text, data.path as string);
+      if (!ok) setInput(text);
+    } catch {
+      // ignore
+    } finally {
+      setUploading(false);
     }
   }
 
@@ -365,6 +428,24 @@ export default function Home() {
                       : "rounded-bl-md bg-white text-neutral-900 shadow-sm dark:bg-neutral-800 dark:text-neutral-100"
                   }`}
                 >
+                  {m.image_path && (
+                    <span className="mb-1.5 block">
+                      {imageIsExpired(m.image_expires_at) ? (
+                        <span className="block rounded-lg bg-neutral-100 px-3 py-4 text-center text-xs text-neutral-400 dark:bg-neutral-700">
+                          Photo expired
+                        </span>
+                      ) : (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={`/api/image?id=${m.id}&path=${encodeURIComponent(
+                            m.image_path,
+                          )}`}
+                          alt=""
+                          className="max-h-64 w-auto max-w-full rounded-lg"
+                        />
+                      )}
+                    </span>
+                  )}
                   {m.body}
                 </div>
                 <span className="mt-0.5 mr-1 text-[10px] text-neutral-400">
@@ -382,6 +463,27 @@ export default function Home() {
           className="mx-auto flex w-full max-w-2xl items-center gap-2"
         >
           <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handlePick}
+            className="hidden"
+            aria-label="Attach a photo"
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={sending || uploading}
+            aria-label="Attach a photo"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-neutral-300 bg-neutral-50 text-base text-neutral-600 transition enabled:hover:border-neutral-400 enabled:hover:text-neutral-900 disabled:opacity-40 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-300 dark:enabled:hover:text-neutral-100"
+          >
+            {uploading ? (
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-neutral-400 border-t-transparent" />
+            ) : (
+              "📷"
+            )}
+          </button>
+          <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -391,10 +493,10 @@ export default function Home() {
           />
           <button
             type="submit"
-            disabled={sending || !input.trim()}
+            disabled={sending || uploading || !input.trim()}
             className="rounded-full bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition enabled:hover:bg-indigo-500 disabled:opacity-40"
           >
-            Send
+            {uploading ? "Uploading…" : "Send"}
           </button>
         </form>
       </div>
