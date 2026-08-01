@@ -179,7 +179,7 @@ export default function Home() {
       const res = await fetch("/api/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: code.trim() }),
+        body: JSON.stringify({ code: code.trim(), name: name.trim() }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
