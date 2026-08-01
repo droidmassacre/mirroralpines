@@ -11,7 +11,7 @@ type Message = {
   created_at: string;
 };
 
-const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME || "Alpine Notes";
+const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME || "Mirror / Alpines";
 const NAME_KEY = "ma_name";
 
 function formatTime(iso: string): string {
@@ -258,7 +258,7 @@ export default function Home() {
                 {APP_NAME}
               </h1>
               <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
-                Private shared space
+                Offline POMODORO app! Made with love :^]
               </p>
             </div>
             <form onSubmit={handleLogin} className="space-y-4">
@@ -306,7 +306,7 @@ export default function Home() {
             </form>
           </div>
           <p className="mt-4 text-center text-xs text-neutral-400">
-            Made for two people. No accounts, no data tracked.
+            Because to hell with your parents.
           </p>
         </div>
       </main>
