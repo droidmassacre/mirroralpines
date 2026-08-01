@@ -5,8 +5,6 @@ import {
   SESSION_TTL,
   checkPasscode,
   getRoomId,
-  isLocked,
-  recordFailure,
   signSession,
 } from "@/lib/auth";
 import { requireServerEnv } from "@/lib/env";
@@ -20,15 +18,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Server not configured." }, { status: 500 });
   }
 
-  const ip =
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
-  if (isLocked(ip)) {
-    return NextResponse.json(
-      { error: "Too many attempts. Try again in a few minutes." },
-      { status: 429 },
-    );
-  }
-
   let body: { code?: unknown } = {};
   try {
     body = await request.json();
@@ -37,13 +26,7 @@ export async function POST(request: NextRequest) {
   }
 
   const code = typeof body.code === "string" ? body.code.trim() : "";
-  if (!code || code.length > 200) {
-    recordFailure(ip);
-    return NextResponse.json({ error: "Invalid passcode." }, { status: 401 });
-  }
-
-  if (!checkPasscode(code)) {
-    recordFailure(ip);
+  if (!code || code.length > 200 || !checkPasscode(code)) {
     return NextResponse.json({ error: "Invalid passcode." }, { status: 401 });
   }
 
