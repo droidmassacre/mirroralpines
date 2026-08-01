@@ -377,7 +377,7 @@ export default function Home() {
   }
 
   return (
-    <main className="flex min-h-dvh flex-col bg-neutral-50 dark:bg-neutral-950">
+    <main className="flex h-dvh flex-col overflow-hidden">
       <header className="flex items-center justify-between border-b border-neutral-200 px-4 py-3 dark:border-neutral-800">
         <div className="flex items-center gap-2">
           <span className="text-lg">🌲</span>
@@ -400,7 +400,7 @@ export default function Home() {
 
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto px-4 py-4"
+        className="min-h-0 flex-1 overflow-y-auto px-4 py-4 — min-h-0"
         style={{ scrollBehavior: "smooth" }}
       >
         <div className="mx-auto flex w-full max-w-2xl flex-col gap-2">
