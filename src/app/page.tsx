@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { getBrowserClient } from "@/lib/client";
 import { imageIsExpired } from "@/lib/images";
+import Pomodoro from "./pomodoro";
 
 type Message = {
   id: number;
@@ -29,7 +30,9 @@ function formatTime(iso: string): string {
 }
 
 export default function Home() {
-  const [status, setStatus] = useState<"loading" | "gate" | "chat">("loading");
+  const [status, setStatus] = useState<"loading" | "gate" | "chat" | "decoy">(
+    "loading",
+  );
   const [code, setCode] = useState("");
   const [name, setName] = useState(() => {
     if (typeof window === "undefined") return "";
@@ -180,7 +183,7 @@ export default function Home() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(data.error ?? "That passcode didn't work.");
+        setStatus("decoy");
         return;
       }
       try {
@@ -376,8 +379,12 @@ export default function Home() {
     );
   }
 
+  if (status === "decoy") {
+    return <Pomodoro />;
+  }
+
   return (
-    <main className="flex h-dvh flex-col overflow-hidden">
+    <main className="flex h-dvh flex-col overflow-hidden bg-neutral-50 dark:bg-neutral-950">
       <header className="flex items-center justify-between border-b border-neutral-200 px-4 py-3 dark:border-neutral-800">
         <div className="flex items-center gap-2">
           <span className="text-lg">🌲</span>
@@ -400,7 +407,7 @@ export default function Home() {
 
       <div
         ref={scrollRef}
-        className="min-h-0 flex-1 overflow-y-auto px-4 py-4 — min-h-0"
+        className="min-h-0 flex-1 overflow-y-auto px-4 py-4"
         style={{ scrollBehavior: "smooth" }}
       >
         <div className="mx-auto flex w-full max-w-2xl flex-col gap-2">
