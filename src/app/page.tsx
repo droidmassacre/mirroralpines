@@ -423,10 +423,10 @@ export default function Home() {
 
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         <section className="flex min-h-0 flex-1 flex-col gap-3 p-3">
-          <div className="min-h-0 flex-1">
+          <div className="min-h-0 flex-[3]">
             <TvWatch channel={channel} />
           </div>
-          <div className="min-h-0 flex-1">
+          <div className="mx-auto w-full max-w-xl min-h-0 flex-1">
             <SpriteSpace channel={channel} name={name} latest={latestBubble} />
           </div>
         </section>
