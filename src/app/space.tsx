@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 
-const SPRITES: Record<string, string> = { mira: "🐻", alp: "🐺" };
+const SPRITES: Record<string, string> = { mira: "[MIRA]", alp: "[ALP]" };
 
 const START: Record<string, { x: number; y: number }> = {
   mira: { x: 70, y: 58 },
