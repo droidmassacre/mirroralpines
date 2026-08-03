@@ -30,7 +30,12 @@ declare global {
 type TvPayload =
   | { action: "load"; videoId: string }
   | { action: "play"; t: number }
-  | { action: "pause" };
+  | { action: "pause" }
+  | { action: "tick"; t: number };
+
+const TICK_MS = 8000;
+const SYNC_THRESHOLD_S = 1.5;
+const MUTE_MS = 700;
 
 function extractVideoId(input: string): string | null {
   try {
@@ -54,10 +59,13 @@ export default function TvWatch({ channel }: { channel: RealtimeChannel | null }
   const [videoId, setVideoId] = useState<string | null>(null);
   const [url, setUrl] = useState("");
   const [ready, setReady] = useState(false);
+  const [playing, setPlaying] = useState(false);
 
   const playerRef = useRef<YTPlayer | null>(null);
   const videoIdRef = useRef<string | null>(null);
-  const suppressRef = useRef(false);
+  const muteUntilRef = useRef(0);
+  const skipPauseRef = useRef(false);
+  const playingRef = useRef(false);
   const subRef = useRef<RealtimeChannel | null>(null);
 
   const send = useCallback(
@@ -69,18 +77,36 @@ export default function TvWatch({ channel }: { channel: RealtimeChannel | null }
 
   const handleState = useCallback(
     (state: number) => {
-      if (suppressRef.current) {
-        suppressRef.current = false;
-        return;
-      }
       if (state === 1) {
+        playingRef.current = true;
+        setPlaying(true);
+      } else if (state === 2 || state === 0) {
+        playingRef.current = false;
+        setPlaying(false);
+      }
+
+      if (state === 1) {
+        if (Date.now() < muteUntilRef.current) return;
         send({ action: "play", t: playerRef.current?.getCurrentTime() ?? 0 });
       } else if (state === 2 || state === 0) {
+        if (skipPauseRef.current) {
+          skipPauseRef.current = false;
+          return;
+        }
         send({ action: "pause" });
       }
     },
     [send],
   );
+
+  useEffect(() => {
+    if (!playing || !videoId || !channel) return;
+    const id = setInterval(() => {
+      const p = playerRef.current;
+      if (p) send({ action: "tick", t: p.getCurrentTime() });
+    }, TICK_MS);
+    return () => clearInterval(id);
+  }, [playing, videoId, channel, send]);
 
   useEffect(() => {
     const start = () => {
@@ -93,7 +119,8 @@ export default function TvWatch({ channel }: { channel: RealtimeChannel | null }
             setReady(true);
             const pending = videoIdRef.current;
             if (pending) {
-              suppressRef.current = true;
+              muteUntilRef.current = Date.now() + MUTE_MS;
+              skipPauseRef.current = true;
               playerRef.current?.loadVideoById(pending);
               playerRef.current?.pauseVideo();
             }
@@ -128,20 +155,26 @@ export default function TvWatch({ channel }: { channel: RealtimeChannel | null }
         videoIdRef.current = m.videoId;
         setVideoId(m.videoId);
         if (p) {
-          suppressRef.current = true;
+          muteUntilRef.current = Date.now() + MUTE_MS;
+          skipPauseRef.current = true;
           p.loadVideoById(m.videoId);
           p.pauseVideo();
         }
       } else if (m.action === "play") {
         if (p) {
-          suppressRef.current = true;
+          muteUntilRef.current = Date.now() + MUTE_MS;
           if (typeof m.t === "number") p.seekTo(m.t, true);
           p.playVideo();
         }
       } else if (m.action === "pause") {
-        if (p) {
-          suppressRef.current = true;
-          p.pauseVideo();
+        if (p) p.pauseVideo();
+      } else if (m.action === "tick") {
+        if (p && typeof m.t === "number" && playingRef.current) {
+          const mine = p.getCurrentTime();
+          if (m.t - mine > SYNC_THRESHOLD_S) {
+            muteUntilRef.current = Date.now() + MUTE_MS;
+            p.seekTo(m.t, true);
+          }
         }
       }
     });
@@ -156,7 +189,8 @@ export default function TvWatch({ channel }: { channel: RealtimeChannel | null }
     send({ action: "load", videoId: id });
     const p = playerRef.current;
     if (p) {
-      suppressRef.current = true;
+      muteUntilRef.current = Date.now() + MUTE_MS;
+      skipPauseRef.current = true;
       p.loadVideoById(id);
       p.pauseVideo();
     }
@@ -166,7 +200,8 @@ export default function TvWatch({ channel }: { channel: RealtimeChannel | null }
     const p = playerRef.current;
     if (!p) return;
     const t = p.getCurrentTime();
-    suppressRef.current = true;
+    muteUntilRef.current = Date.now() + MUTE_MS;
+    skipPauseRef.current = true;
     p.pauseVideo();
     p.seekTo(t, true);
     p.playVideo();
