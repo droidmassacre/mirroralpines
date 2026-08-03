@@ -5,6 +5,8 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 import { getBrowserClient } from "@/lib/client";
 import { imageIsExpired } from "@/lib/images";
 import Pomodoro from "./pomodoro";
+import SpriteSpace from "./space";
+import TvWatch from "./tv";
 
 type Message = {
   id: number;
@@ -53,6 +55,7 @@ export default function Home() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [channel, setChannel] = useState<RealtimeChannel | null>(null);
 
   const appendMessages = useCallback((incoming: Message[]) => {
     if (!incoming.length) return;
@@ -71,6 +74,16 @@ export default function Home() {
   }, []);
 
   const lastId = messages.length ? messages[messages.length - 1].id : 0;
+
+  const latestBubble = messages.length
+    ? {
+        id: messages[messages.length - 1].id,
+        sender: messages[messages.length - 1].sender,
+        text:
+          messages[messages.length - 1].body ||
+          (messages[messages.length - 1].image_path ? "📷" : ""),
+      }
+    : null;
 
   useEffect(() => {
     lastIdRef.current = lastId;
@@ -130,10 +143,13 @@ export default function Home() {
         const msg = payload.payload as Message;
         if (msg && typeof msg.id === "number") appendMessages([msg]);
       })
-      .subscribe();
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") setChannel(channel);
+      });
     return () => {
       supabase.removeChannel(channel);
       channelRef.current = null;
+      setChannel(null);
     };
   }, [status, roomId, appendMessages]);
 
@@ -405,107 +421,118 @@ export default function Home() {
         </div>
       </header>
 
-      <div
-        ref={scrollRef}
-        className="min-h-0 flex-1 overflow-y-auto px-4 py-4"
-        style={{ scrollBehavior: "smooth" }}
-      >
-        <div className="mx-auto flex w-full max-w-2xl flex-col gap-2">
-          {messages.length === 0 && (
-            <p className="mt-10 text-center text-sm text-neutral-400">
-              No messages yet. Say hi.
-            </p>
-          )}
-          {messages.map((m) => {
-            const mine = m.sender === (name || "You");
-            return (
-              <div
-                key={m.id}
-                className={`flex flex-col ${mine ? "items-end" : "items-start"}`}
-              >
-                {!mine && (
-                  <span className="mb-0.5 ml-1 text-xs text-neutral-400">
-                    {m.sender}
-                  </span>
-                )}
-                <div
-                  className={`max-w-[78%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed break-words whitespace-pre-wrap ${
-                    mine
-                      ? "rounded-br-md bg-indigo-600 text-white"
-                      : "rounded-bl-md bg-white text-neutral-900 shadow-sm dark:bg-neutral-800 dark:text-neutral-100"
-                  }`}
-                >
-                  {m.image_path && (
-                    <span className="mb-1.5 block">
-                      {imageIsExpired(m.image_expires_at) ? (
-                        <span className="block rounded-lg bg-neutral-100 px-3 py-4 text-center text-xs text-neutral-400 dark:bg-neutral-700">
-                          Photo expired
-                        </span>
-                      ) : (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={`/api/image?id=${m.id}&path=${encodeURIComponent(
-                            m.image_path,
-                          )}`}
-                          alt=""
-                          className="max-h-64 w-auto max-w-full rounded-lg"
-                        />
-                      )}
-                    </span>
-                  )}
-                  {m.body}
-                </div>
-                <span className="mt-0.5 mr-1 text-[10px] text-neutral-400">
-                  {formatTime(m.created_at)}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
+      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+        <section className="flex min-h-0 flex-1 flex-col gap-3 p-3">
+          <div className="min-h-0 flex-1">
+            <TvWatch channel={channel} />
+          </div>
+          <div className="min-h-0 flex-1">
+            <SpriteSpace channel={channel} name={name} latest={latestBubble} />
+          </div>
+        </section>
 
-      <div className="border-t border-neutral-200 bg-white px-4 py-3 dark:border-neutral-800 dark:bg-neutral-900">
-        <form
-          onSubmit={handleSend}
-          className="mx-auto flex w-full max-w-2xl items-center gap-2"
-        >
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            onChange={handlePick}
-            className="hidden"
-            aria-label="Attach a photo"
-          />
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={sending || uploading}
-            aria-label="Attach a photo"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-neutral-300 bg-neutral-50 text-base text-neutral-600 transition enabled:hover:border-neutral-400 enabled:hover:text-neutral-900 disabled:opacity-40 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-300 dark:enabled:hover:text-neutral-100"
+        <aside className="flex h-[46dvh] min-h-0 flex-col border-t border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-950 md:h-auto md:w-[340px] md:border-l md:border-t-0">
+          <div
+            ref={scrollRef}
+            className="min-h-0 flex-1 overflow-y-auto px-3 py-3"
+            style={{ scrollBehavior: "smooth" }}
           >
-            {uploading ? (
-              <span className="h-4 w-4 animate-spin rounded-full border-2 border-neutral-400 border-t-transparent" />
-            ) : (
-              "📷"
-            )}
-          </button>
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Type a message…"
-            autoComplete="off"
-            className="flex-1 rounded-full border border-neutral-300 bg-neutral-50 px-4 py-2 text-sm text-neutral-900 outline-none focus:border-neutral-400 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100"
-          />
-          <button
-            type="submit"
-            disabled={sending || uploading || !input.trim()}
-            className="rounded-full bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition enabled:hover:bg-indigo-500 disabled:opacity-40"
+            <div className="flex flex-col gap-2">
+              {messages.length === 0 && (
+                <p className="mt-6 text-center text-sm text-neutral-400">
+                  No messages yet. Say hi.
+                </p>
+              )}
+              {messages.map((m) => {
+                const mine = m.sender === (name || "You");
+                return (
+                  <div
+                    key={m.id}
+                    className={`flex flex-col ${mine ? "items-end" : "items-start"}`}
+                  >
+                    {!mine && (
+                      <span className="mb-0.5 ml-1 text-xs text-neutral-400">
+                        {m.sender}
+                      </span>
+                    )}
+                    <div
+                      className={`max-w-[85%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed break-words whitespace-pre-wrap ${
+                        mine
+                          ? "rounded-br-md bg-indigo-600 text-white"
+                          : "rounded-bl-md bg-white text-neutral-900 shadow-sm dark:bg-neutral-800 dark:text-neutral-100"
+                      }`}
+                    >
+                      {m.image_path && (
+                        <span className="mb-1.5 block">
+                          {imageIsExpired(m.image_expires_at) ? (
+                            <span className="block rounded-lg bg-neutral-100 px-3 py-4 text-center text-xs text-neutral-400 dark:bg-neutral-700">
+                              Photo expired
+                            </span>
+                          ) : (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={`/api/image?id=${m.id}&path=${encodeURIComponent(
+                                m.image_path,
+                              )}`}
+                              alt=""
+                              className="max-h-48 w-auto max-w-full rounded-lg"
+                            />
+                          )}
+                        </span>
+                      )}
+                      {m.body}
+                    </div>
+                    <span className="mt-0.5 mr-1 text-[10px] text-neutral-400">
+                      {formatTime(m.created_at)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <form
+            onSubmit={handleSend}
+            className="flex items-center gap-2 border-t border-neutral-200 bg-white px-3 py-2.5 dark:border-neutral-800 dark:bg-neutral-900"
           >
-            {uploading ? "Uploading…" : "Send"}
-          </button>
-        </form>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handlePick}
+              className="hidden"
+              aria-label="Attach a photo"
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={sending || uploading}
+              aria-label="Attach a photo"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-neutral-300 bg-neutral-50 text-base text-neutral-600 transition enabled:hover:border-neutral-400 enabled:hover:text-neutral-900 disabled:opacity-40 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-300 dark:enabled:hover:text-neutral-100"
+            >
+              {uploading ? (
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-neutral-400 border-t-transparent" />
+              ) : (
+                "📷"
+              )}
+            </button>
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Type a message…"
+              autoComplete="off"
+              className="flex-1 rounded-full border border-neutral-300 bg-neutral-50 px-4 py-2 text-sm text-neutral-900 outline-none focus:border-neutral-400 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100"
+            />
+            <button
+              type="submit"
+              disabled={sending || uploading || !input.trim()}
+              className="rounded-full bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition enabled:hover:bg-indigo-500 disabled:opacity-40"
+            >
+              {uploading ? "Uploading…" : "Send"}
+            </button>
+          </form>
+        </aside>
       </div>
     </main>
   );
